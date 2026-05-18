@@ -14,10 +14,10 @@ from sqlalchemy import engine_from_config, pool
 
 from alembic import context
 from travai.config import settings
-from travai.db.base import Base
 
 # Importera alla modeller så de registreras på Base.metadata
 from travai.db import models  # noqa: F401
+from travai.db.base import Base
 from travai.db.models import FEATURES_SCHEMA
 
 config = context.config
@@ -30,7 +30,9 @@ config.set_main_option("sqlalchemy.url", settings.database_url)
 target_metadata = Base.metadata
 
 
-def include_object(object: object, name: str | None, type_: str, *args: object, **kwargs: object) -> bool:
+def include_object(
+    object: object, name: str | None, type_: str, *args: object, **kwargs: object
+) -> bool:
     """Filter som inkluderar både public och features tabeller."""
     return True
 
@@ -59,6 +61,7 @@ def run_migrations_online() -> None:
     with connectable.connect() as connection:
         # Säkerställ att features-schemat finns innan migration kör
         from sqlalchemy import text
+
         connection.execute(text(f'CREATE SCHEMA IF NOT EXISTS "{FEATURES_SCHEMA}"'))
         connection.commit()
 

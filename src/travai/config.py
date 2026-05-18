@@ -15,9 +15,7 @@ class Settings(BaseSettings):
     )
 
     # Databas
-    database_url: str = Field(
-        default="postgresql+psycopg://travai:travai@localhost:5432/travai"
-    )
+    database_url: str = Field(default="postgresql+psycopg://travai:travai@localhost:5432/travai")
 
     # ATG
     atg_base_url: str = Field(default="https://www.atg.se/services/racinginfo/v1/api")

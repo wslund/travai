@@ -23,7 +23,7 @@ from sqlalchemy import (
     UniqueConstraint,
 )
 from sqlalchemy.dialects.postgresql import ARRAY, JSONB
-from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy.orm import Mapped, mapped_column
 
 from travai.db.base import Base, TimestampMixin, UUIDPrimaryKey
 
@@ -71,7 +71,9 @@ class Meeting(Base, UUIDPrimaryKey, TimestampMixin):
     session: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
 
     name: Mapped[str | None] = mapped_column(String(200))
-    status: Mapped[str | None] = mapped_column(String(30))  # 'scheduled', 'running', 'results', 'cancelled'
+    status: Mapped[str | None] = mapped_column(
+        String(30)
+    )  # 'scheduled', 'running', 'results', 'cancelled'
 
     currency_code: Mapped[str | None] = mapped_column(String(3))  # SEK, EUR, USD
 
@@ -87,9 +89,7 @@ class Race(Base, UUIDPrimaryKey, TimestampMixin):
     )
 
     meeting_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("meetings.id"), nullable=False)
-    discipline_code: Mapped[str] = mapped_column(
-        ForeignKey("disciplines.code"), nullable=False
-    )
+    discipline_code: Mapped[str] = mapped_column(ForeignKey("disciplines.code"), nullable=False)
 
     number: Mapped[int] = mapped_column(Integer, nullable=False)
     name: Mapped[str | None] = mapped_column(String(500))
@@ -232,9 +232,7 @@ class OddsSnapshot(Base, UUIDPrimaryKey, TimestampMixin):
     """
 
     __tablename__ = "odds_snapshots"
-    __table_args__ = (
-        Index("ix_odds_start_type_time", "start_id", "bet_type_code", "captured_at"),
-    )
+    __table_args__ = (Index("ix_odds_start_type_time", "start_id", "bet_type_code", "captured_at"),)
 
     start_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("starts.id"), nullable=False)
     bet_type_code: Mapped[str] = mapped_column(String(20), nullable=False)
@@ -305,9 +303,7 @@ class RawPayload(Base, UUIDPrimaryKey, TimestampMixin):
         Index("ix_raw_fetched_at", "fetched_at"),
     )
 
-    source_code: Mapped[str] = mapped_column(
-        ForeignKey("data_sources.code"), nullable=False
-    )
+    source_code: Mapped[str] = mapped_column(ForeignKey("data_sources.code"), nullable=False)
     entity_type: Mapped[str] = mapped_column(String(20), nullable=False)
     # 'game', 'race', 'horse', etc - vad payloaden representerar
     external_id: Mapped[str] = mapped_column(String(200), nullable=False)

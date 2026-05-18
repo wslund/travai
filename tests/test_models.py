@@ -2,20 +2,7 @@
 
 from travai.db import Base
 from travai.db.models import (
-    BetType,
-    Country,
-    DataSource,
-    Discipline,
-    ExternalId,
     Horse,
-    Meeting,
-    OddsSnapshot,
-    Person,
-    Race,
-    RawPayload,
-    SectionalTime,
-    Start,
-    Track,
 )
 
 
@@ -46,9 +33,7 @@ def test_all_expected_tables_in_metadata() -> None:
 
 def test_features_schema_tables_exist() -> None:
     """Features-schema-tabellerna ska vara i metadata med rätt schema."""
-    feature_tables = [
-        t for t in Base.metadata.tables.values() if t.schema == "features"
-    ]
+    feature_tables = [t for t in Base.metadata.tables.values() if t.schema == "features"]
     expected_names = {
         "horse_form_snapshots",
         "track_post_position_stats",
@@ -63,7 +48,7 @@ def test_features_schema_tables_exist() -> None:
 def test_horse_self_reference() -> None:
     """Hästens pedigree-FK ska peka till horses själv."""
     horse_cols = Horse.__table__.columns
-    father_fk = list(horse_cols["father_id"].foreign_keys)[0]
-    mother_fk = list(horse_cols["mother_id"].foreign_keys)[0]
+    father_fk = next(iter(horse_cols["father_id"].foreign_keys))
+    mother_fk = next(iter(horse_cols["mother_id"].foreign_keys))
     assert father_fk.column.table.name == "horses"
     assert mother_fk.column.table.name == "horses"

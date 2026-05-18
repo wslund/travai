@@ -16,7 +16,9 @@ class Country(Base, TimestampMixin):
 
     __tablename__ = "countries"
 
-    code: Mapped[str] = mapped_column(String(2), primary_key=True)  # SE, FR, US, HK, JP, GB, IE, AU, NO
+    code: Mapped[str] = mapped_column(
+        String(2), primary_key=True
+    )  # SE, FR, US, HK, JP, GB, IE, AU, NO
     name: Mapped[str] = mapped_column(String(100), nullable=False)
     currency_code: Mapped[str | None] = mapped_column(String(3))  # SEK, EUR, USD, HKD, JPY
 

@@ -19,7 +19,6 @@ from decimal import Decimal
 
 from sqlalchemy import (
     Date,
-    ForeignKey,
     Index,
     Integer,
     Numeric,
@@ -40,9 +39,7 @@ class HorseFormSnapshot(Base, UUIDPrimaryKey, TimestampMixin):
     """
 
     __tablename__ = "horse_form_snapshots"
-    __table_args__ = (
-        {"schema": FEATURES_SCHEMA},
-    )
+    __table_args__ = ({"schema": FEATURES_SCHEMA},)
 
     start_id: Mapped[uuid.UUID] = mapped_column(nullable=False, index=True)
     horse_id: Mapped[uuid.UUID] = mapped_column(nullable=False, index=True)
@@ -84,7 +81,11 @@ class TrackPostPositionStats(Base, UUIDPrimaryKey, TimestampMixin):
     __table_args__ = (
         Index(
             "ix_pp_stats_lookup",
-            "track_id", "distance_m", "start_method", "post_position", "as_of_date",
+            "track_id",
+            "distance_m",
+            "start_method",
+            "post_position",
+            "as_of_date",
             unique=True,
         ),
         {"schema": FEATURES_SCHEMA},
@@ -115,7 +116,10 @@ class PersonRollingStats(Base, UUIDPrimaryKey, TimestampMixin):
     __table_args__ = (
         Index(
             "ix_person_stats_lookup",
-            "person_id", "role", "as_of_date", "window_days",
+            "person_id",
+            "role",
+            "as_of_date",
+            "window_days",
             unique=True,
         ),
         {"schema": FEATURES_SCHEMA},

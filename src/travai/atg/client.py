@@ -89,9 +89,7 @@ class ATGClient:
         response = await self._client.get(path)
         if response.status_code == 429:
             logger.warning("rate_limited", path=path)
-            raise httpx.HTTPStatusError(
-                "Rate limited", request=response.request, response=response
-            )
+            raise httpx.HTTPStatusError("Rate limited", request=response.request, response=response)
         response.raise_for_status()
         return response.json()
 

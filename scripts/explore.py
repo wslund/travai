@@ -61,6 +61,7 @@ async def explore(target_day: date) -> None:
         out_path = f"data/raw_{first_game_id}.json"
 
         import os
+
         os.makedirs("data", exist_ok=True)
         with open(out_path, "w", encoding="utf-8") as f:
             json.dump(raw, f, ensure_ascii=False, indent=2)
@@ -72,10 +73,7 @@ async def explore(target_day: date) -> None:
 def main() -> None:
     configure_logging()
 
-    if len(sys.argv) > 1:
-        target_day = date.fromisoformat(sys.argv[1])
-    else:
-        target_day = date.today()
+    target_day = date.fromisoformat(sys.argv[1]) if len(sys.argv) > 1 else date.today()
 
     asyncio.run(explore(target_day))
 

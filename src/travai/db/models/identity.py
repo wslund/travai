@@ -44,12 +44,8 @@ class Horse(Base, UUIDPrimaryKey, TimestampMixin):
     birth_year: Mapped[int | None] = mapped_column(Integer, index=True)
     country_of_birth: Mapped[str | None] = mapped_column(String(5))  # ISO eller längre länderkoder
 
-    father_id: Mapped[uuid.UUID | None] = mapped_column(
-        ForeignKey("horses.id"), index=True
-    )
-    mother_id: Mapped[uuid.UUID | None] = mapped_column(
-        ForeignKey("horses.id"), index=True
-    )
+    father_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("horses.id"), index=True)
+    mother_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("horses.id"), index=True)
 
     # Senast kända ägaruppgifter - uppdateras vid varje ingest
     last_known_owner: Mapped[str | None] = mapped_column(String(200))
@@ -111,7 +107,9 @@ class ExternalId(Base, TimestampMixin):
     __tablename__ = "external_ids"
     __table_args__ = (
         UniqueConstraint(
-            "source_code", "entity_type", "external_id",
+            "source_code",
+            "entity_type",
+            "external_id",
             name="uq_external_id_source_type_id",
         ),
         Index("ix_external_id_lookup", "source_code", "entity_type", "external_id"),
@@ -119,16 +117,12 @@ class ExternalId(Base, TimestampMixin):
     )
 
     # Sammansatt PK över alla tre fält
-    source_code: Mapped[str] = mapped_column(
-        ForeignKey("data_sources.code"), primary_key=True
-    )
+    source_code: Mapped[str] = mapped_column(ForeignKey("data_sources.code"), primary_key=True)
     entity_type: Mapped[str] = mapped_column(String(20), primary_key=True)
     # 'horse', 'person', 'track', 'race', 'start', 'meeting'
     external_id: Mapped[str] = mapped_column(String(100), primary_key=True)
 
-    internal_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), nullable=False, index=True
-    )
+    internal_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False, index=True)
 
     # När mappingen först skapades och senast sågs - användbart för debug
     first_seen_at: Mapped[date] = mapped_column(Date, nullable=False)
