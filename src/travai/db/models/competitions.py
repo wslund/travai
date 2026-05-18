@@ -5,7 +5,7 @@ universella men sport-specifika fält tillåts vara NULL för andra sporter.
 """
 
 import uuid
-from datetime import date as DateType
+from datetime import date as DateType  # noqa: N812
 from datetime import datetime
 from decimal import Decimal
 

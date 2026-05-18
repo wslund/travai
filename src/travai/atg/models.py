@@ -5,7 +5,7 @@ vi fortfarande utforskar strukturen. När vi vet exakt vilka fält vi
 behöver låser vi typningen.
 """
 
-from datetime import date as Date
+from datetime import date as Date  # noqa: N812
 from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -39,7 +39,7 @@ class Race(LooseModel):
     number: int | None = None
     name: str | None = None
     distance: int | None = None
-    startMethod: str | None = None
+    startMethod: str | None = None  # noqa: N815
     starts: list[dict[str, Any]] = Field(default_factory=list)
 
 

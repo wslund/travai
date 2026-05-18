@@ -21,28 +21,24 @@ from travai.db.models.identity import ExternalId, Horse, Person
 from travai.db.models.reference import BetType, Country, DataSource, Discipline
 
 __all__ = [
-    # reference
+    "FEATURES_SCHEMA",
     "BetType",
     "Country",
     "DataSource",
     "Discipline",
-    # identity
+    "EquipmentChange",
     "ExternalId",
     "Horse",
-    "Person",
-    # competitions
-    "EquipmentChange",
+    "HorseFormSnapshot",
     "Meeting",
     "OddsSnapshot",
+    "Person",
+    "PersonRollingStats",
     "Race",
     "RawPayload",
     "SectionalTime",
     "Start",
     "Track",
-    "WeatherObservation",
-    # features
-    "FEATURES_SCHEMA",
-    "HorseFormSnapshot",
-    "PersonRollingStats",
     "TrackPostPositionStats",
+    "WeatherObservation",
 ]
