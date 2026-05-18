@@ -1,8 +1,8 @@
 """Pydantic-modeller för ATG:s API-svar.
 
-I detta läge håller vi modellerna medvetet lösa (extra=allow) eftersom
-vi fortfarande utforskar strukturen. När vi vet exakt vilka fält vi
-behöver låser vi typningen.
+Modellerna är medvetet lösa (extra=allow) eftersom vi vill behålla
+flexibiliteten att läsa fält som vi ännu inte modellerat. Adaptern
+plockar fält direkt från råa dict:ar för det mesta.
 """
 
 from datetime import date as Date  # noqa: N812
@@ -12,7 +12,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 
 class LooseModel(BaseModel):
-    """Bas som tillåter okända fält - för utforskning."""
+    """Bas som tillåter okända fält."""
 
     model_config = ConfigDict(extra="allow", populate_by_name=True)
 
@@ -33,7 +33,7 @@ class CalendarDay(LooseModel):
 
 
 class Race(LooseModel):
-    """Ett enskilt lopp inom ett spel (t.ex. en avdelning av V75)."""
+    """Ett enskilt lopp inom ett spel."""
 
     id: str
     number: int | None = None

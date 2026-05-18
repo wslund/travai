@@ -20,9 +20,9 @@ from tenacity import (
     wait_exponential,
 )
 
-from travai.atg.models import CalendarDay, Game
 from travai.config import settings
 from travai.logging_setup import get_logger
+from travai.sources.atg.models import CalendarDay, Game
 
 logger = get_logger(__name__)
 
@@ -99,11 +99,7 @@ class ATGClient:
         return CalendarDay.model_validate(data)
 
     async def game(self, game_id: str) -> Game:
-        """Hämta detaljerad info om ett spel (t.ex. V75_2024-01-13_23_5).
-
-        Game-id-format: {PRODUKT}_{DATUM}_{BANA}_{LOPP}
-        Exempel: V75_2024-01-13_23_5
-        """
+        """Hämta detaljerad info om ett spel (t.ex. V75_2024-01-13_23_5)."""
         data = await self._get(f"/games/{game_id}")
         return Game.model_validate(data)
 
