@@ -12,8 +12,8 @@ import json
 import sys
 from datetime import date
 
-from travai.atg import ATGClient
 from travai.logging_setup import configure_logging, get_logger
+from travai.sources.atg import ATGClient
 
 logger = get_logger(__name__)
 

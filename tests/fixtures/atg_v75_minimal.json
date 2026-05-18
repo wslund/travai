@@ -1,0 +1,108 @@
+{
+  "@type": ".Game",
+  "id": "V75_2025-05-10_27_5",
+  "type": "V75",
+  "status": "results",
+  "currentVersion": 1,
+  "newBettingSystem": true,
+  "pools": {
+    "V75": {
+      "@type": ".MarkingBetPool",
+      "id": "V75_2025-05-10_27_5",
+      "turnover": 9905408000,
+      "jackpotAmount": 22461776
+    }
+  },
+  "races": [
+    {
+      "id": "2025-05-10_27_5",
+      "name": "Test-lopp",
+      "date": "2025-05-10",
+      "number": 5,
+      "distance": 2140,
+      "startMethod": "volte",
+      "startTime": "2025-05-10T16:25:21",
+      "scheduledStartTime": "2025-05-10T16:20:00",
+      "prize": "150.000-75.000-40.000",
+      "terms": ["Test"],
+      "sport": "trot",
+      "track": {
+        "id": 27,
+        "name": "Umåker",
+        "condition": "light",
+        "countryCode": "SE",
+        "sportSystemCode": "U"
+      },
+      "result": {
+        "victoryMargin": "hals",
+        "scratchings": [3]
+      },
+      "status": "results",
+      "starts": [
+        {
+          "id": "2025-05-10_27_5_1",
+          "number": 1,
+          "postPosition": 1,
+          "distance": 2140,
+          "horse": {
+            "id": 782100,
+            "name": "Slave to Queen Cal",
+            "age": 5,
+            "sex": "mare",
+            "money": 219800,
+            "color": "fux",
+            "trainer": {
+              "id": 1407,
+              "firstName": "Enar",
+              "lastName": "Gustafsson",
+              "shortName": "Gus En",
+              "location": "Södra Sunderbyn",
+              "birth": 1948,
+              "license": "B-tränare: träna, köra för bolag",
+              "silks": "Grön, ACTION i rött; grön"
+            },
+            "shoes": {
+              "reported": true,
+              "front": {"hasShoe": true, "changed": false},
+              "back": {"hasShoe": true, "changed": false}
+            },
+            "sulky": {
+              "reported": true,
+              "type": {"code": "VA", "text": "Vanlig", "changed": true},
+              "colour": {"code": "GU", "text": "Gul", "changed": false}
+            },
+            "owner": {"id": 236694, "name": "HB Team Action"},
+            "breeder": {"id": 737308, "name": "Calif.GmbH", "location": "Tyskland"},
+            "pedigree": {
+              "father": {"id": 562580, "name": "Love You", "nationality": "FR"},
+              "mother": {"id": 743014, "name": "Schiavone O.K.", "nationality": "IT"},
+              "grandfather": {"id": 562595, "name": "Daguet Rapide", "nationality": "IT"}
+            }
+          },
+          "driver": {
+            "id": 188987,
+            "firstName": "Per",
+            "lastName": "Linderoth",
+            "shortName": "Lin Pe",
+            "location": "Karlstad",
+            "birth": 1980,
+            "license": "A-tränare: träna, köra"
+          },
+          "result": {
+            "place": 8,
+            "finishOrder": 8,
+            "kmTime": {"minutes": 1, "seconds": 14, "tenths": 7},
+            "prizeMoney": 5000,
+            "finalOdds": 112.03,
+            "startNumber": 1
+          },
+          "pools": {
+            "vinnare": {"@type": ".VinnareStartPool", "odds": 11203},
+            "plats": {"@type": ".PlatsStartPool", "minOdds": 1436, "maxOdds": 1436},
+            "V75": {"@type": ".MarkingBetStartPool", "betDistribution": 82}
+          }
+        }
+      ]
+    }
+  ]
+}

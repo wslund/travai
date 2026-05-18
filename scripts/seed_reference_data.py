@@ -1,15 +1,15 @@
-"""Seeda referensdata (countries, disciplines, data_sources).
+"""Seeda referensdata (countries, disciplines, data_sources, bet_types).
 
 Kör:
     uv run python scripts/seed_reference_data.py
 
-Idempotent - kan köras om utan att duplicera. Använder ON CONFLICT DO NOTHING.
+Idempotent - kan köras om utan att duplicera.
 """
 
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from travai.db import session_scope
-from travai.db.models import Country, DataSource, Discipline
+from travai.db.models import BetType, Country, DataSource, Discipline
 from travai.logging_setup import configure_logging, get_logger
 
 logger = get_logger(__name__)
@@ -91,6 +91,157 @@ DATA_SOURCES = [
 ]
 
 
+# Bet types för svenska ATG. Pool-typer från ATG:s API.
+BET_TYPES = [
+    # Sammansatta spel (flera lopp)
+    {
+        "code": "V75",
+        "operator": "atg",
+        "country_code": "SE",
+        "name": "V75",
+        "legs": 7,
+        "is_jackpot": True,
+    },
+    {
+        "code": "V86",
+        "operator": "atg",
+        "country_code": "SE",
+        "name": "V86",
+        "legs": 8,
+        "is_jackpot": True,
+    },
+    {
+        "code": "V64",
+        "operator": "atg",
+        "country_code": "SE",
+        "name": "V64",
+        "legs": 6,
+        "is_jackpot": False,
+    },
+    {
+        "code": "V65",
+        "operator": "atg",
+        "country_code": "SE",
+        "name": "V65",
+        "legs": 6,
+        "is_jackpot": False,
+    },
+    {
+        "code": "GS75",
+        "operator": "atg",
+        "country_code": "SE",
+        "name": "GS75",
+        "legs": 7,
+        "is_jackpot": True,
+    },
+    {
+        "code": "V5",
+        "operator": "atg",
+        "country_code": "SE",
+        "name": "V5",
+        "legs": 5,
+        "is_jackpot": False,
+    },
+    {
+        "code": "V4",
+        "operator": "atg",
+        "country_code": "SE",
+        "name": "V4",
+        "legs": 4,
+        "is_jackpot": False,
+    },
+    {
+        "code": "V3",
+        "operator": "atg",
+        "country_code": "SE",
+        "name": "V3",
+        "legs": 3,
+        "is_jackpot": False,
+    },
+    {
+        "code": "DD",
+        "operator": "atg",
+        "country_code": "SE",
+        "name": "Dagens Dubbel",
+        "legs": 2,
+        "is_jackpot": False,
+    },
+    {
+        "code": "LD",
+        "operator": "atg",
+        "country_code": "SE",
+        "name": "Lokal Dubbel",
+        "legs": 2,
+        "is_jackpot": False,
+    },
+    {
+        "code": "TOP7",
+        "operator": "atg",
+        "country_code": "SE",
+        "name": "Top 7",
+        "legs": 7,
+        "is_jackpot": False,
+    },
+    {
+        "code": "RAKET",
+        "operator": "atg",
+        "country_code": "SE",
+        "name": "Raket",
+        "legs": 1,
+        "is_jackpot": False,
+    },
+    # Enkla pari-mutuel-pooler (per lopp)
+    {
+        "code": "VINNARE",
+        "operator": "atg",
+        "country_code": "SE",
+        "name": "Vinnare",
+        "legs": 1,
+        "is_jackpot": False,
+    },
+    {
+        "code": "PLATS",
+        "operator": "atg",
+        "country_code": "SE",
+        "name": "Plats",
+        "legs": 1,
+        "is_jackpot": False,
+    },
+    {
+        "code": "VP",
+        "operator": "atg",
+        "country_code": "SE",
+        "name": "Vinnare + Plats",
+        "legs": 1,
+        "is_jackpot": False,
+    },
+    {
+        "code": "TVILLING",
+        "operator": "atg",
+        "country_code": "SE",
+        "name": "Tvilling",
+        "legs": 1,
+        "is_jackpot": False,
+    },
+    {
+        "code": "TRIO",
+        "operator": "atg",
+        "country_code": "SE",
+        "name": "Trio",
+        "legs": 1,
+        "is_jackpot": False,
+    },
+    {
+        "code": "KOMB",
+        "operator": "atg",
+        "country_code": "SE",
+        "name": "Komb",
+        "legs": 1,
+        "is_jackpot": False,
+    },
+]
+
+
 def seed() -> None:
     """Seeda referensdata med UPSERT-mönster."""
     with session_scope() as session:
@@ -98,6 +249,7 @@ def seed() -> None:
             (Country, COUNTRIES),
             (Discipline, DISCIPLINES),
             (DataSource, DATA_SOURCES),
+            (BetType, BET_TYPES),
         ]:
             for row in rows:
                 stmt = pg_insert(table_class).values(**row).on_conflict_do_nothing()
