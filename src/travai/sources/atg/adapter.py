@@ -6,8 +6,11 @@ Designprinciper:
   inga dubletter skapas
 - Hela ATG-svaret sparas alltid i raw_payloads så vi kan plocka fält senare
 - Vid uppdatering rörs bara de fält där vi har ny information
+- Defensiv felhantering: saknade fält ger tydliga meddelanden, okända länder
+  faller tillbaka till ZZ istället för att krascha
 """
 
+from collections.abc import Iterable
 from datetime import UTC, date, datetime
 from decimal import Decimal
 from typing import Any
@@ -17,6 +20,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from travai.db.models import (
+    Country,
     EquipmentChange,
     ExternalId,
     Horse,
@@ -35,13 +39,8 @@ from travai.sources.base import SourceAdapter
 logger = get_logger(__name__)
 
 SOURCE_CODE = "atg"
+FALLBACK_COUNTRY = "ZZ"  # Måste finnas i countries-tabellen via seed
 
-# Spelformer vi vill ingestera. Bortsåning av enkla pari-mutuel-pooler
-# (vinnare, plats, trio etc) eftersom de finns i alla games - vi tar dem
-# bara via huvudgames för att inte göra dubbelt arbete.
-INTERESTING_PRODUCTS = {"V75", "V86", "V64", "V65", "GS75"}
-
-# Mappning från ATG startMethod till vårt schema
 START_METHOD_MAP = {
     "auto": "auto",
     "volte": "volte",
@@ -53,9 +52,35 @@ class AtgAdapter(SourceAdapter):
 
     source_code = SOURCE_CODE
 
-    def __init__(self, client: ATGClient | None = None) -> None:
+    DEFAULT_PRODUCTS: frozenset[str] = frozenset(
+        {
+            "V75",
+            "V86",
+            "V64",
+            "V65",
+            "GS75",
+            "V5",
+            "V4",
+            "V3",
+            "dd",
+            "ld",
+            "top7",
+            "raket",
+        }
+    )
+
+    FULL_COVERAGE_PRODUCTS: frozenset[str] = DEFAULT_PRODUCTS | {"vinnare"}
+
+    def __init__(
+        self,
+        client: ATGClient | None = None,
+        products: Iterable[str] | None = None,
+    ) -> None:
         self._client = client or ATGClient()
         self._client_owned = client is None
+        self._products = frozenset(products) if products else self.DEFAULT_PRODUCTS
+        # Cache över country-koder som finns i databasen (laddas lazy)
+        self._known_countries: set[str] | None = None
 
     async def close(self) -> None:
         if self._client_owned:
@@ -70,11 +95,10 @@ class AtgAdapter(SourceAdapter):
     # ---------- SourceAdapter interface ----------
 
     async def list_meetings(self, day: date) -> list[dict[str, Any]]:
-        """Returnerar alla intressanta games (V75 etc) som körs en dag."""
         calendar = await self._client.calendar_day(day)
         results: list[dict[str, Any]] = []
         for product, games in calendar.games.items():
-            if product not in INTERESTING_PRODUCTS:
+            if product not in self._products:
                 continue
             for game in games:
                 results.append(
@@ -87,11 +111,9 @@ class AtgAdapter(SourceAdapter):
         return results
 
     async def fetch_meeting(self, external_id: str) -> dict[str, Any]:
-        """Hämta komplett game-rådata från ATG."""
         return await self._client.game_raw(external_id)
 
     def ingest_meeting(self, session: Session, raw_data: dict[str, Any]) -> dict[str, int]:
-        """Persistera ett game och alla nestade entiteter."""
         counts = {
             "tracks": 0,
             "meetings": 0,
@@ -103,14 +125,25 @@ class AtgAdapter(SourceAdapter):
             "equipment_changes": 0,
         }
 
-        game_id = raw_data["id"]
+        game_id = raw_data.get("id")
+        if not game_id:
+            raise ValueError(f"Game saknar id, keys={list(raw_data.keys())}")
+
         logger.info("ingest_game_start", game_id=game_id)
 
-        # Spara rådata för audit/backfill
         self._save_raw_payload(session, "game", game_id, raw_data)
 
         for race_data in raw_data.get("races", []):
-            self._ingest_race(session, race_data, counts)
+            try:
+                self._ingest_race(session, race_data, counts)
+            except ValueError as exc:
+                logger.warning(
+                    "race_skipped",
+                    game_id=game_id,
+                    race_id=race_data.get("id", "?"),
+                    reason=str(exc),
+                )
+                continue
 
         logger.info("ingest_game_done", game_id=game_id, **counts)
         return counts
@@ -120,25 +153,46 @@ class AtgAdapter(SourceAdapter):
     def _ingest_race(
         self, session: Session, race_data: dict[str, Any], counts: dict[str, int]
     ) -> Race:
-        track_data = race_data.get("track") or {}
+        if not race_data.get("id"):
+            raise ValueError("Race saknar id")
+
+        track_data = race_data.get("track")
+        if not track_data or not track_data.get("id"):
+            raise ValueError(f"Race {race_data['id']} saknar track-data eller track-id")
+
         track = self._upsert_track(session, track_data, counts)
 
         race_date = self._parse_date(race_data.get("date"))
         if race_date is None:
-            raise ValueError(f"Race {race_data.get('id')} saknar datum")
+            raise ValueError(f"Race {race_data['id']} saknar datum")
 
         meeting = self._upsert_meeting(session, track, race_date, counts)
         race = self._upsert_race(session, meeting, race_data, counts)
 
         for start_data in race_data.get("starts", []):
-            self._ingest_start(session, race, start_data, counts)
+            try:
+                self._ingest_start(session, race, start_data, counts)
+            except ValueError as exc:
+                logger.warning(
+                    "start_skipped",
+                    race_id=race_data["id"],
+                    start_id=start_data.get("id", "?"),
+                    reason=str(exc),
+                )
+                continue
 
         return race
 
     def _ingest_start(
         self, session: Session, race: Race, start_data: dict[str, Any], counts: dict[str, int]
     ) -> Start:
-        horse_data = start_data.get("horse") or {}
+        if not start_data.get("id"):
+            raise ValueError("Start saknar id")
+
+        horse_data = start_data.get("horse")
+        if not horse_data or not horse_data.get("id"):
+            raise ValueError(f"Start {start_data['id']} saknar horse-data eller horse-id")
+
         horse = self._upsert_horse(session, horse_data, counts)
 
         rider = self._upsert_person(session, start_data.get("driver"), counts)
@@ -150,6 +204,34 @@ class AtgAdapter(SourceAdapter):
         self._upsert_equipment_changes(session, start, start_data, counts)
 
         return start
+
+    # ---------- Country resolution ----------
+
+    def _resolve_country_code(self, session: Session, raw_code: str | None) -> str:
+        """Validera country_code mot countries-tabellen.
+
+        Faller tillbaka till FALLBACK_COUNTRY (ZZ) om koden inte finns. Detta
+        gör adaptern robust mot internationella banor som dyker upp i ATG
+        utan att vi har dem i countries-seed.
+        """
+        if not raw_code:
+            return FALLBACK_COUNTRY
+
+        normalized = raw_code.upper()
+
+        # Lazy-init: läs alla kända country-koder en gång per adapter-instans
+        if self._known_countries is None:
+            self._known_countries = set(session.execute(select(Country.code)).scalars().all())
+
+        if normalized in self._known_countries:
+            return normalized
+
+        logger.warning(
+            "unknown_country_fallback",
+            requested=normalized,
+            fallback=FALLBACK_COUNTRY,
+        )
+        return FALLBACK_COUNTRY
 
     # ---------- ExternalId helpers ----------
 
@@ -188,19 +270,21 @@ class AtgAdapter(SourceAdapter):
         atg_id = str(track_data["id"])
         external = self._find_external(session, "track", atg_id)
 
+        country_code = self._resolve_country_code(session, track_data.get("countryCode"))
+
         if external:
             external.last_seen_at = date.today()
             track = session.get(Track, external.internal_id)
             if track is None:
                 raise RuntimeError(f"Track {atg_id} mappad men hittas inte i tabellen")
-            # Uppdatera om något ändrats
             track.name = track_data.get("name") or track.name
+            track.country_code = country_code
             return track
 
         track = Track(
             id=uuid4(),
             name=track_data.get("name") or f"ATG track {atg_id}",
-            country_code=(track_data.get("countryCode") or "SE").upper(),
+            country_code=country_code,
         )
         session.add(track)
         session.flush()
@@ -213,8 +297,6 @@ class AtgAdapter(SourceAdapter):
     def _upsert_meeting(
         self, session: Session, track: Track, meeting_date: date, counts: dict[str, int]
     ) -> Meeting:
-        # External-id konstrueras från track+datum eftersom ATG inte har
-        # ett distinkt "meeting"-koncept som vi har
         external_id = f"{track.id}_{meeting_date.isoformat()}"
         external = self._find_external(session, "meeting", external_id)
 
@@ -253,7 +335,7 @@ class AtgAdapter(SourceAdapter):
         result = race_data.get("result") or {}
         race_kwargs = {
             "meeting_id": meeting.id,
-            "discipline_code": "trot_sulky",  # ATG ger oss bara svensk trav
+            "discipline_code": "trot_sulky",
             "number": race_data.get("number") or 0,
             "name": race_data.get("name"),
             "distance_m": race_data.get("distance"),
@@ -309,7 +391,6 @@ class AtgAdapter(SourceAdapter):
             "last_known_breeder": breeder.get("name"),
             "career_earnings_minor": horse_data.get("money"),
         }
-        # Räkna ut födelseår baklänges från ålder + race-datum (approximation)
         if horse_data.get("age"):
             horse_kwargs["birth_year"] = date.today().year - int(horse_data["age"])
 
@@ -333,8 +414,7 @@ class AtgAdapter(SourceAdapter):
     def _upsert_pedigree_horse(
         self, session: Session, parent: dict[str, Any] | None, counts: dict[str, int]
     ) -> UUID | None:
-        """Lägg upp en avelshäst som inte själv tävlar."""
-        if not parent or "id" not in parent:
+        if not parent or not parent.get("id"):
             return None
         atg_id = str(parent["id"])
         external = self._find_external(session, "horse", atg_id)
@@ -357,7 +437,7 @@ class AtgAdapter(SourceAdapter):
     def _upsert_person(
         self, session: Session, person_data: dict[str, Any] | None, counts: dict[str, int]
     ) -> Person | None:
-        if not person_data or "id" not in person_data:
+        if not person_data or not person_data.get("id"):
             return None
         atg_id = str(person_data["id"])
         external = self._find_external(session, "person", atg_id)
@@ -492,7 +572,6 @@ class AtgAdapter(SourceAdapter):
             counts["odds_snapshots"] += 1
 
     def _pool_to_snapshot_kwargs(self, code: str, pool: dict[str, Any]) -> dict[str, Any] | None:
-        """Konvertera ATG:s pool-objekt till snapshot-kwargs."""
         if "odds" in pool:
             return {
                 "odds_decimal": Decimal(str(pool["odds"])) / 100,
@@ -503,9 +582,8 @@ class AtgAdapter(SourceAdapter):
                 "odds_decimal_max": Decimal(str(pool["maxOdds"])) / 100,
             }
         if "betDistribution" in pool:
-            # V75 ger spelfördelning i promille
             return {
-                "odds_decimal": Decimal("0"),  # vi har ingen odds, bara fördelning
+                "odds_decimal": Decimal("0"),
                 "pool_share": Decimal(str(pool["betDistribution"])) / 1000,
             }
         return None
@@ -594,7 +672,6 @@ class AtgAdapter(SourceAdapter):
 
     @staticmethod
     def _parse_km_time(value: dict[str, Any] | None) -> Decimal | None:
-        """ATG: {minutes:1, seconds:14, tenths:7} → 74.7 sekunder per km."""
         if not value:
             return None
         minutes = value.get("minutes", 0) or 0

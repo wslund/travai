@@ -20,7 +20,7 @@ class Settings(BaseSettings):
     # ATG
     atg_base_url: str = Field(default="https://www.atg.se/services/racinginfo/v1/api")
     atg_user_agent: str = Field(default="TravAI/0.1")
-    atg_rate_limit_seconds: float = Field(default=3.0)
+    atg_rate_limit_seconds: float = Field(default=5.0)
 
     # Logging
     log_level: str = Field(default="INFO")

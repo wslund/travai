@@ -16,19 +16,59 @@ logger = get_logger(__name__)
 
 
 COUNTRIES = [
+    # Norden
     {"code": "SE", "name": "Sverige", "currency_code": "SEK"},
-    {"code": "FR", "name": "France", "currency_code": "EUR"},
-    {"code": "GB", "name": "United Kingdom", "currency_code": "GBP"},
-    {"code": "IE", "name": "Ireland", "currency_code": "EUR"},
-    {"code": "US", "name": "United States", "currency_code": "USD"},
-    {"code": "HK", "name": "Hong Kong", "currency_code": "HKD"},
-    {"code": "JP", "name": "Japan", "currency_code": "JPY"},
-    {"code": "AU", "name": "Australia", "currency_code": "AUD"},
     {"code": "NO", "name": "Norge", "currency_code": "NOK"},
     {"code": "DK", "name": "Danmark", "currency_code": "DKK"},
     {"code": "FI", "name": "Suomi", "currency_code": "EUR"},
+    {"code": "IS", "name": "Ísland", "currency_code": "ISK"},
+    # Stora EU-länder
+    {"code": "FR", "name": "France", "currency_code": "EUR"},
     {"code": "DE", "name": "Deutschland", "currency_code": "EUR"},
     {"code": "IT", "name": "Italia", "currency_code": "EUR"},
+    {"code": "ES", "name": "España", "currency_code": "EUR"},
+    {"code": "NL", "name": "Nederland", "currency_code": "EUR"},
+    {"code": "BE", "name": "België", "currency_code": "EUR"},
+    {"code": "AT", "name": "Österreich", "currency_code": "EUR"},
+    {"code": "CH", "name": "Schweiz", "currency_code": "CHF"},
+    {"code": "PL", "name": "Polska", "currency_code": "PLN"},
+    {"code": "CZ", "name": "Česko", "currency_code": "CZK"},
+    {"code": "HU", "name": "Magyarország", "currency_code": "HUF"},
+    {"code": "PT", "name": "Portugal", "currency_code": "EUR"},
+    {"code": "GR", "name": "Ελλάδα", "currency_code": "EUR"},
+    {"code": "RO", "name": "România", "currency_code": "RON"},
+    {"code": "IE", "name": "Ireland", "currency_code": "EUR"},
+    # Storbritannien
+    {"code": "GB", "name": "United Kingdom", "currency_code": "GBP"},
+    # Östeuropa / OSS
+    {"code": "RU", "name": "Россия", "currency_code": "RUB"},
+    {"code": "UA", "name": "Україна", "currency_code": "UAH"},
+    # Nordamerika
+    {"code": "US", "name": "United States", "currency_code": "USD"},
+    {"code": "CA", "name": "Canada", "currency_code": "CAD"},
+    {"code": "MX", "name": "México", "currency_code": "MXN"},
+    # Sydamerika
+    {"code": "AR", "name": "Argentina", "currency_code": "ARS"},
+    {"code": "BR", "name": "Brasil", "currency_code": "BRL"},
+    {"code": "CL", "name": "Chile", "currency_code": "CLP"},
+    {"code": "PE", "name": "Perú", "currency_code": "PEN"},
+    # Asien
+    {"code": "JP", "name": "Japan", "currency_code": "JPY"},
+    {"code": "HK", "name": "Hong Kong", "currency_code": "HKD"},
+    {"code": "SG", "name": "Singapore", "currency_code": "SGD"},
+    {"code": "KR", "name": "한국", "currency_code": "KRW"},
+    {"code": "MO", "name": "Macao", "currency_code": "MOP"},
+    {"code": "IN", "name": "India", "currency_code": "INR"},
+    {"code": "AE", "name": "الإمارات", "currency_code": "AED"},
+    {"code": "TR", "name": "Türkiye", "currency_code": "TRY"},
+    # Oceanien
+    {"code": "AU", "name": "Australia", "currency_code": "AUD"},
+    {"code": "NZ", "name": "New Zealand", "currency_code": "NZD"},
+    # Afrika
+    {"code": "ZA", "name": "South Africa", "currency_code": "ZAR"},
+    {"code": "MA", "name": "Morocco", "currency_code": "MAD"},
+    # Specialfall för okända/odefinierade
+    {"code": "ZZ", "name": "Unknown", "currency_code": None},
 ]
 
 
@@ -68,13 +108,13 @@ DATA_SOURCES = [
         "name": "The Racing API",
         "country_code": "GB",
         "base_url": "https://api.theracingapi.com",
-        "notes": "Kommersiell tredjepart, kräver abonnemang. UK/IE/HK kärna + USA/AUS som tillägg.",
+        "notes": "Kommersiell tredjepart. UK/IE/HK kärna + USA/AUS som tillägg.",
     },
     {
         "code": "equibase",
         "name": "Equibase",
         "country_code": "US",
-        "notes": "Officiell US-databas. Stängd, ofta används tredjepart istället.",
+        "notes": "Officiell US-databas. Stängd, tredjepart används ofta.",
     },
     {
         "code": "jra",
@@ -91,9 +131,7 @@ DATA_SOURCES = [
 ]
 
 
-# Bet types för svenska ATG. Pool-typer från ATG:s API.
 BET_TYPES = [
-    # Sammansatta spel (flera lopp)
     {
         "code": "V75",
         "operator": "atg",
@@ -190,7 +228,6 @@ BET_TYPES = [
         "legs": 1,
         "is_jackpot": False,
     },
-    # Enkla pari-mutuel-pooler (per lopp)
     {
         "code": "VINNARE",
         "operator": "atg",
@@ -243,7 +280,6 @@ BET_TYPES = [
 
 
 def seed() -> None:
-    """Seeda referensdata med UPSERT-mönster."""
     with session_scope() as session:
         for table_class, rows in [
             (Country, COUNTRIES),
