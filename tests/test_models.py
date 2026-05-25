@@ -35,6 +35,7 @@ def test_features_schema_tables_exist() -> None:
     """Features-schema-tabellerna ska vara i metadata med rätt schema."""
     feature_tables = [t for t in Base.metadata.tables.values() if t.schema == "features"]
     expected_names = {
+        "start_features",
         "horse_form_snapshots",
         "track_post_position_stats",
         "person_rolling_stats",

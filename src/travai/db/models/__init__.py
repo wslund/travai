@@ -1,4 +1,4 @@
-"""Alla databasmodeller, importerade här så de registreras på Base.metadata."""
+"""SQLAlchemy-modeller för TravAI:s globala schema."""
 
 from travai.db.models.competitions import (
     EquipmentChange,
@@ -15,6 +15,7 @@ from travai.db.models.features import (
     FEATURES_SCHEMA,
     HorseFormSnapshot,
     PersonRollingStats,
+    StartFeatures,
     TrackPostPositionStats,
 )
 from travai.db.models.identity import ExternalId, Horse, Person
@@ -38,6 +39,7 @@ __all__ = [
     "RawPayload",
     "SectionalTime",
     "Start",
+    "StartFeatures",
     "Track",
     "TrackPostPositionStats",
     "WeatherObservation",
