@@ -130,25 +130,54 @@ class FeatureBuilder:
         logger.info("feature_build_done", rows=len(df), columns=len(df.columns))
         return df
 
-    def write(
-        self, df: pd.DataFrame, schema: str = "features", table: str = "start_features"
-    ) -> None:
-        """Skriv features-DataFrame till databasen. Skriver över befintlig data."""
+    def write(self, df: pd.DataFrame, schema: str = "features", table: str = "start_features") -> None:
+        """Skriv features-DataFrame via Postgres COPY (snabbt, ingen parameter-grans)."""
+        import io
+
         logger.info("writing_features", rows=len(df), table=f"{schema}.{table}")
-        # Vi använder pandas to_sql med method='multi' för batchade inserts
-        # Truncate först eftersom vi bygger om allt från grunden
+
         with self.engine.begin() as conn:
             conn.execute(text(f"TRUNCATE TABLE {schema}.{table}"))
-        df.to_sql(
-            table,
-            self.engine,
-            schema=schema,
-            if_exists="append",
-            index=False,
-            method="multi",
-            chunksize=5000,
-        )
-        logger.info("write_done")
+
+        # Casta kolumner som ska vara INTEGER i DB men är float i pandas pga NaN
+        int_cols = [
+            "finish_position", "relevance_score",
+            "career_starts_prior", "career_wins_prior", "career_top3_prior",
+            "career_earnings_minor_prior",
+            "starts_30d", "starts_90d", "starts_365d",
+            "wins_30d", "wins_90d", "wins_365d",
+            "top3_30d", "top3_90d",
+            "days_since_last_start",
+            "starts_at_track_prior", "wins_at_track_prior", "starts_at_distance_prior",
+            "rider_drives_30d", "rider_wins_30d", "rider_drives_90d", "rider_wins_90d",
+            "trainer_starts_30d", "trainer_wins_30d", "trainer_starts_90d", "trainer_wins_90d",
+            "father_offspring_wins", "mother_offspring_wins",
+            "num_starters", "post_position", "horse_age_at_start", "distance_m",
+            "odds_rank_in_race",
+            "month", "day_of_week", "year",
+        ]
+        df_out = df.copy()
+        for col in int_cols:
+            if col in df_out.columns:
+                df_out[col] = df_out[col].astype("Int64")  # pandas nullable integer
+
+        buffer = io.StringIO()
+        df_out.to_csv(buffer, index=False, header=False, na_rep="\\N")
+        csv_data = buffer.getvalue()
+
+        columns = ",".join(df_out.columns)
+        copy_sql = f"COPY {schema}.{table} ({columns}) FROM STDIN WITH (FORMAT CSV, NULL '\\N')"
+
+        raw_conn = self.engine.raw_connection()
+        try:
+            cursor = raw_conn.cursor()
+            with cursor.copy(copy_sql) as copy:
+                copy.write(csv_data)
+            raw_conn.commit()
+        finally:
+            raw_conn.close()
+
+        logger.info("write_done", rows=len(df))
 
     # ---------- Steg-för-steg ----------
 
@@ -222,19 +251,27 @@ class FeatureBuilder:
         df = self._add_time_window_features(df, "horse_id")
 
         # Best km-time career & 90d
-        df["best_km_time_career"] = g["km_time_s"].transform(lambda x: x.shift(1).expanding().min())
-        df["best_km_time_90d"] = self._time_window_min(df, "horse_id", "km_time_s", days=90)
+        df["best_km_time_career"] = (
+            g["km_time_s"].transform(lambda x: x.shift(1).expanding().min())
+        )
+        df["best_km_time_90d"] = self._time_window_min(
+            df, "horse_id", "km_time_s", days=90
+        )
 
         # Rolling form (5 last starts)
-        df["avg_finish_pos_last5"] = g["finish_position"].transform(
-            lambda x: x.shift(1).rolling(window=5, min_periods=1).mean()
+        df["avg_finish_pos_last5"] = (
+            g["finish_position"]
+            .transform(lambda x: x.shift(1).rolling(window=5, min_periods=1).mean())
         )
-        df["avg_km_time_last5"] = g["km_time_s"].transform(
-            lambda x: x.shift(1).rolling(window=5, min_periods=1).mean()
+        df["avg_km_time_last5"] = (
+            g["km_time_s"]
+            .transform(lambda x: x.shift(1).rolling(window=5, min_periods=1).mean())
         )
 
         # Bana- och distansspecifika
-        df["starts_at_track_prior"] = self._cumulative_match_prior(df, "horse_id", "track_id")
+        df["starts_at_track_prior"] = self._cumulative_match_prior(
+            df, "horse_id", "track_id"
+        )
         df["wins_at_track_prior"] = self._cumulative_match_prior_filtered(
             df, "horse_id", "track_id", df["finish_position"] == 1
         )
@@ -305,7 +342,9 @@ class FeatureBuilder:
         return out
 
     @staticmethod
-    def _count_in_window_filtered(dates: np.ndarray, flags: np.ndarray, days: int) -> np.ndarray:
+    def _count_in_window_filtered(
+        dates: np.ndarray, flags: np.ndarray, days: int
+    ) -> np.ndarray:
         """Som ovan men räkna bara där flag=True."""
         n = len(dates)
         out = np.zeros(n, dtype="int64")
@@ -370,7 +409,9 @@ class FeatureBuilder:
             .fillna(0)
         )
         # Edge case: shift hopper över första raden i varje grupp
-        first_in_group = df_sorted.groupby([group_col, match_col], sort=False).cumcount() == 0
+        first_in_group = (
+            df_sorted.groupby([group_col, match_col], sort=False).cumcount() == 0
+        )
         df_sorted.loc[first_in_group, "_cum"] = 0
         return df_sorted["_cum"].reindex(df.index).astype("int64")
 
@@ -413,18 +454,14 @@ class FeatureBuilder:
         groups = df_sorted.groupby(role_col, sort=False, dropna=True)
 
         for days in [30, 90]:
-            col_drives = (
-                f"{prefix}_drives_{days}d" if prefix == "rider" else f"{prefix}_starts_{days}d"
-            )
+            col_drives = f"{prefix}_drives_{days}d" if prefix == "rider" else f"{prefix}_starts_{days}d"
             col_wins = f"{prefix}_wins_{days}d"
             df_sorted[col_drives] = 0
             df_sorted[col_wins] = 0
 
             for _person_id, idx in groups.groups.items():
                 dates = df_sorted.loc[idx, "effective_date"].values
-                wins_flag = (
-                    (df_sorted.loc[idx, "finish_position"] == 1).fillna(False).astype(bool).values
-                )
+                wins_flag = (df_sorted.loc[idx, "finish_position"] == 1).fillna(False).astype(bool).values
                 df_sorted.loc[idx, col_drives] = self._count_in_window(dates, days)
                 df_sorted.loc[idx, col_wins] = self._count_in_window_filtered(
                     dates, wins_flag, days
@@ -451,7 +488,9 @@ class FeatureBuilder:
         upp till race_date. Förenklat för v1.
         """
         # Segrar per häst
-        wins_per_horse = (df[df["finish_position"] == 1].groupby("horse_id").size()).rename("wins")
+        wins_per_horse = (
+            df[df["finish_position"] == 1].groupby("horse_id").size()
+        ).rename("wins")
 
         # För varje far/mor: summa segrar av alla avkomman
         father_wins = (
@@ -536,76 +575,41 @@ class FeatureBuilder:
     def _select_output_columns(self, df: pd.DataFrame) -> pd.DataFrame:
         """Plocka ut bara de kolumner som matchar StartFeatures-modellen."""
         cols = [
-            "start_id",
-            "race_id",
-            "horse_id",
-            "race_date",
+            "start_id", "race_id", "horse_id", "race_date",
             # Target
-            "finish_position",
-            "relevance_score",
+            "finish_position", "relevance_score",
             # Häst-career
-            "career_starts_prior",
-            "career_wins_prior",
-            "career_top3_prior",
-            "career_earnings_minor_prior",
-            "career_win_rate",
-            "career_top3_rate",
+            "career_starts_prior", "career_wins_prior", "career_top3_prior",
+            "career_earnings_minor_prior", "career_win_rate", "career_top3_rate",
             # Häst-rolling
-            "starts_30d",
-            "starts_90d",
-            "starts_365d",
-            "wins_30d",
-            "wins_90d",
-            "wins_365d",
-            "top3_30d",
-            "top3_90d",
+            "starts_30d", "starts_90d", "starts_365d",
+            "wins_30d", "wins_90d", "wins_365d",
+            "top3_30d", "top3_90d",
             # Häst-tider
-            "avg_finish_pos_last5",
-            "best_km_time_career",
-            "best_km_time_90d",
+            "avg_finish_pos_last5", "best_km_time_career", "best_km_time_90d",
             "avg_km_time_last5",
             # Vila
             "days_since_last_start",
             # Häst-bana/distans
-            "starts_at_track_prior",
-            "wins_at_track_prior",
-            "starts_at_distance_prior",
+            "starts_at_track_prior", "wins_at_track_prior", "starts_at_distance_prior",
             # Rider
-            "rider_drives_30d",
-            "rider_wins_30d",
-            "rider_drives_90d",
-            "rider_wins_90d",
-            "rider_win_rate_90d",
+            "rider_drives_30d", "rider_wins_30d",
+            "rider_drives_90d", "rider_wins_90d", "rider_win_rate_90d",
             # Trainer
-            "trainer_starts_30d",
-            "trainer_wins_30d",
-            "trainer_starts_90d",
-            "trainer_wins_90d",
-            "trainer_win_rate_90d",
+            "trainer_starts_30d", "trainer_wins_30d",
+            "trainer_starts_90d", "trainer_wins_90d", "trainer_win_rate_90d",
             # Pedigree
-            "father_offspring_wins",
-            "mother_offspring_wins",
+            "father_offspring_wins", "mother_offspring_wins",
             # Equipment
-            "shoes_front",
-            "shoes_back",
-            "shoes_either_changed",
-            "sulky_changed",
+            "shoes_front", "shoes_back", "shoes_either_changed", "sulky_changed",
             # Race-context
-            "num_starters",
-            "post_position",
-            "post_position_normalized",
-            "horse_age_at_start",
-            "distance_m",
+            "num_starters", "post_position", "post_position_normalized",
+            "horse_age_at_start", "distance_m",
             # Odds
-            "final_win_odds",
-            "log_final_win_odds",
-            "odds_rank_in_race",
-            "is_favorite",
-            "v75_pool_share",
+            "final_win_odds", "log_final_win_odds", "odds_rank_in_race",
+            "is_favorite", "v75_pool_share",
             # Tid
-            "month",
-            "day_of_week",
-            "year",
+            "month", "day_of_week", "year",
         ]
         # Behåll bara kolumner som faktiskt finns (defensiv mot framtida ändringar)
         existing = [c for c in cols if c in df.columns]
