@@ -497,37 +497,83 @@ class FeatureBuilder:
     # ---------- Pedigree ----------
 
     def _add_pedigree_features(self, df: pd.DataFrame) -> pd.DataFrame:
-        """För varje förälder: totalt antal segrar bland avkomman i datan.
+        """Tidsmedvetna pedigree-features (fixad i steg 5d).
 
-        OBS: detta är inte tidsmedvetet - vi använder hela dataset. För strikt
-        tidsmedvetenhet hade vi behövt rolling sum av segrar för avkomman
-        upp till race_date. Förenklat för v1.
+        För varje start: antalet vinster av syskon (samma mother_id/father_id)
+        som inträffade STRIKT FÖRE start.race_date.
+
+        Använder pandas merge_asof med direction='backward' och
+        allow_exact_matches=False -> O((n+m) log) prestanda.
+
+        Original-bug (pre-5d): räknade total summa av alla syskons vinster
+        över hela dataset, vilket gav future leakage.
         """
-        # Segrar per häst
-        wins_per_horse = (df[df["finish_position"] == 1].groupby("horse_id").size()).rename("wins")
+        original_index = df.index.copy()
+        df = df.copy()
 
-        # För varje far/mor: summa segrar av alla avkomman
-        father_wins = (
-            df[["horse_id", "father_id"]]
-            .drop_duplicates()
-            .merge(wins_per_horse, left_on="horse_id", right_index=True, how="left")
-            .groupby("father_id")["wins"]
-            .sum()
-        ).rename("father_offspring_wins")
+        # Steg 1: hitta alla vinster med föräldrar
+        wins_df = df.loc[
+            df["finish_position"] == 1,
+            ["race_date", "horse_id", "mother_id", "father_id"],
+        ].copy()
 
+        # Steg 2: cumcount per mor (sorterat per datum)
         mother_wins = (
-            df[["horse_id", "mother_id"]]
-            .drop_duplicates()
-            .merge(wins_per_horse, left_on="horse_id", right_index=True, how="left")
-            .groupby("mother_id")["wins"]
-            .sum()
-        ).rename("mother_offspring_wins")
+            wins_df[wins_df["mother_id"].notna()]
+            .sort_values(["mother_id", "race_date"])
+            .reset_index(drop=True)
+        )
+        mother_wins["mother_offspring_wins"] = mother_wins.groupby("mother_id").cumcount() + 1
+        mother_lookup = mother_wins[
+            ["race_date", "mother_id", "mother_offspring_wins"]
+        ].sort_values("race_date")
 
-        df = df.merge(father_wins, left_on="father_id", right_index=True, how="left")
-        df = df.merge(mother_wins, left_on="mother_id", right_index=True, how="left")
-        df["father_offspring_wins"] = df["father_offspring_wins"].fillna(0).astype("int64")
-        df["mother_offspring_wins"] = df["mother_offspring_wins"].fillna(0).astype("int64")
-        return df
+        # Steg 3: cumcount per far
+        father_wins = (
+            wins_df[wins_df["father_id"].notna()]
+            .sort_values(["father_id", "race_date"])
+            .reset_index(drop=True)
+        )
+        father_wins["father_offspring_wins"] = father_wins.groupby("father_id").cumcount() + 1
+        father_lookup = father_wins[
+            ["race_date", "father_id", "father_offspring_wins"]
+        ].sort_values("race_date")
+
+        # Steg 4: merge_asof - strikt < race_date
+        df_sorted = df.sort_values("race_date").copy()
+        df_sorted["_orig_index"] = df_sorted.index
+
+        df_sorted = pd.merge_asof(
+            df_sorted,
+            mother_lookup,
+            on="race_date",
+            by="mother_id",
+            direction="backward",
+            allow_exact_matches=False,
+        )
+
+        df_sorted = pd.merge_asof(
+            df_sorted,
+            father_lookup,
+            on="race_date",
+            by="father_id",
+            direction="backward",
+            allow_exact_matches=False,
+        )
+
+        df_sorted["mother_offspring_wins"] = (
+            df_sorted["mother_offspring_wins"].fillna(0).astype("int64")
+        )
+        df_sorted["father_offspring_wins"] = (
+            df_sorted["father_offspring_wins"].fillna(0).astype("int64")
+        )
+
+        # Återställ ursprunglig ordning
+        df_sorted = df_sorted.set_index("_orig_index").sort_index()
+        df_sorted.index = original_index
+        df_sorted.index.name = df.index.name
+
+        return df_sorted
 
     # ---------- Race-kontext ----------
 
