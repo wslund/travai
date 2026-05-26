@@ -1,9 +1,15 @@
 """Träna en LightGBM LambdaRank-modell på TravAI-features.
 
 Användning:
+    # Träna med ALLA features (inklusive odds)
     uv run python scripts/train.py
-    uv run python scripts/train.py --model-dir models/v1
-    uv run python scripts/train.py --train-end 2024-01-01 --val-end 2025-01-01
+
+    # Träna utan odds-features (live-scenario, pre odds-close)
+    uv run python scripts/train.py --preset pre-odds-close \\
+        --model-dir models/pre_odds_close
+
+    # Egen exkluderingslista
+    uv run python scripts/train.py --exclude-features final_win_odds,is_favorite
 """
 
 import argparse
@@ -14,12 +20,19 @@ from travai.logging_setup import configure_logging, get_logger
 from travai.model.dataset import (
     DEFAULT_TRAIN_END,
     DEFAULT_VAL_END,
+    ODDS_FEATURES,
     load_dataset,
 )
 from travai.model.evaluation import evaluate, evaluate_betting_roi
 from travai.model.lgbm import feature_importance, train_model
 
 logger = get_logger(__name__)
+
+
+PRESETS = {
+    "all-features": [],  # Inget exkluderat — använd allt
+    "pre-odds-close": ODDS_FEATURES,  # Simulera spel innan odds stänger
+}
 
 
 def parse_args() -> argparse.Namespace:
@@ -54,17 +67,56 @@ def parse_args() -> argparse.Namespace:
         default=None,
         help="Override learning rate (default 0.05)",
     )
+    parser.add_argument(
+        "--preset",
+        choices=list(PRESETS.keys()),
+        default="all-features",
+        help="Färdiga konfigurationer: all-features eller pre-odds-close",
+    )
+    parser.add_argument(
+        "--exclude-features",
+        type=str,
+        default=None,
+        help="Kommaseparerad lista av features att exkludera "
+        "(utöver preset). T.ex. 'final_win_odds,is_favorite'",
+    )
     return parser.parse_args()
+
+
+def resolve_exclude_features(args: argparse.Namespace) -> list[str]:
+    """Bygg ihop exclusion-listan från preset + explicit CLI."""
+    excluded = list(PRESETS[args.preset])
+    if args.exclude_features:
+        extra = [f.strip() for f in args.exclude_features.split(",") if f.strip()]
+        excluded.extend(extra)
+    return sorted(set(excluded))
 
 
 def main() -> None:
     configure_logging()
     args = parse_args()
 
-    logger.info("training_pipeline_start", model_dir=str(args.model_dir))
+    excluded = resolve_exclude_features(args)
+    logger.info(
+        "training_pipeline_start",
+        model_dir=str(args.model_dir),
+        preset=args.preset,
+        excluded_features=excluded,
+    )
 
     # 1. Ladda och splitta data
-    splits = load_dataset(train_end=args.train_end, val_end=args.val_end)
+    splits = load_dataset(
+        train_end=args.train_end,
+        val_end=args.val_end,
+        exclude_features=excluded,
+    )
+
+    print(f"\nFeatures som används ({len(splits.feature_names)}):")
+    print(", ".join(splits.feature_names))
+    if excluded:
+        print(f"\nFeatures som exkluderats ({len(excluded)}):")
+        print(", ".join(excluded))
+    print()
 
     # 2. Träna
     params = {}

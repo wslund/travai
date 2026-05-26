@@ -41,13 +41,24 @@ NON_FEATURE_COLUMNS = {
     "horse_id",
     "race_date",
     "finish_position",
+    "relevance_score",
     "created_at",
     "updated_at",
-    "relevance_score",
 }
 
 # Kolumner som ska behandlas som kategoriska av LightGBM
 CATEGORICAL_COLUMNS = ["month", "day_of_week"]
+
+# Odds-relaterade features. Användbara, men dessa kan vara delvis "läckage"
+# från marknadens åsikt — om vi vill simulera pre-odds-close prediktion ska
+# vi exkludera dem.
+ODDS_FEATURES = [
+    "final_win_odds",
+    "log_final_win_odds",
+    "odds_rank_in_race",
+    "is_favorite",
+    "v75_pool_share",
+]
 
 
 @dataclass
@@ -93,15 +104,26 @@ def load_dataset(
     train_end: date = DEFAULT_TRAIN_END,
     val_end: date = DEFAULT_VAL_END,
     min_starters: int = 3,
+    exclude_features: list[str] | None = None,
 ) -> DatasetSplits:
     """Ladda features och splitta i train/val/test.
 
-    min_starters: minsta antal startande för att inkludera ett lopp.
-                  Lopp med 1-2 hästar är inte meningsfulla att ranka.
+    Args:
+        min_starters: minsta antal startande för att inkludera ett lopp.
+                      Lopp med 1-2 hästar är inte meningsfulla att ranka.
+        exclude_features: extra features att exkludera utöver
+                          NON_FEATURE_COLUMNS. Användbart för "pre-odds-close"
+                          modell-varianter.
     """
     engine = engine or default_engine
+    exclude_features = exclude_features or []
 
-    logger.info("loading_features", train_end=str(train_end), val_end=str(val_end))
+    logger.info(
+        "loading_features",
+        train_end=str(train_end),
+        val_end=str(val_end),
+        exclude_features=exclude_features,
+    )
 
     sql = """
     SELECT *
@@ -144,7 +166,14 @@ def load_dataset(
 
     # Vilka kolumner är features?
     all_cols = set(df.columns)
-    feature_cols = sorted(all_cols - NON_FEATURE_COLUMNS)
+    excluded = NON_FEATURE_COLUMNS | set(exclude_features)
+    feature_cols = sorted(all_cols - excluded)
+
+    logger.info(
+        "feature_selection",
+        total=len(feature_cols),
+        excluded_extra=exclude_features,
+    )
 
     return DatasetSplits(
         train=_build_dataset(train_df, feature_cols),
@@ -156,11 +185,10 @@ def load_dataset(
 
 
 def _build_dataset(df: pd.DataFrame, feature_cols: list[str]) -> FeatureDataset:
-    """Bygg en FeatureDataset från en sortcd DataFrame.
+    """Bygg en FeatureDataset från en sorterad DataFrame.
 
     Data ska vara sorterad efter race_id för att group_sizes ska funka.
     """
-    # Sortera per race_id (även om input är sorterad efter race_date+race_id)
     df = df.sort_values(["race_id", "start_id"]).reset_index(drop=True)
 
     # Group sizes: antal rader per race_id, i ordning
